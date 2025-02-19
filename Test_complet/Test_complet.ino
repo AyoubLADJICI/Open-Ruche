@@ -1,10 +1,21 @@
 #include <MKRWAN.h>
 #include <Wire.h>
 #include "uFire_SHT20.h"
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
+//Configuration du module LoRa
 LoRaModem modem;
-uFire_SHT20 sht20; // Initialisation du capteur SHT20
 
+//Initialisation du capteur SHT20
+uFire_SHT20 sht20; 
+
+// Initialisation du capteur DS18B20
+#define ONE_WIRE_BUS 0  // Broche DATA du DS18B20 (D0 sur le MKR WAN 1310)
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature ds18b20(&oneWire);
+
+//Clés LoRa pour OTAA
 String AppEUI = "213D57ED00000000";
 String AppKEY = "8EED2DFE0FA94091FC093C1EBBF382C8";
 
@@ -23,10 +34,10 @@ void setup() {
   err_count=0;
   con =0;
 
-  // Initialisation du capteur SHT20
+  // Initialisation des capteurs
   Wire.begin();
   sht20.begin();
-
+  ds18b20.begin();
 }
 
 void loop() {
@@ -45,10 +56,10 @@ void loop() {
   }
 
   if ( connected ) {
-    Serial.println("📡 Lecture du capteur SHT20...");
+    Serial.println("📡 Lecture des capteurs..");
 
+    // 🔹 Mesure Température et Humidité du SHT20
     sht20.measure_all();  // Mesure température et humidité
-
     float temp_sht20 = sht20.tempC;
     float hum_sht20 = sht20.RH;
 
@@ -57,27 +68,31 @@ void loop() {
       return;
     }
 
+    // 🔹 Mesure Température DS18B20
+    ds18b20.requestTemperatures();
+    float temp_ds18b20 = ds18b20.getTempCByIndex(0);
+
+    if (temp_ds18b20 == DEVICE_DISCONNECTED_C) {
+      Serial.println("❌ Erreur : Capteur DS18B20 non détecté !");
+      return;
+    }
+
     // Convertir en short (multiplié par 100 pour garder 2 décimales)
     short temp_sht20_int = (short)(temp_sht20 * 100);
     short hum_sht20_int = (short)(hum_sht20 * 100);
+    short temp_ds18b20_int = (short)(temp_ds18b20 * 100);
 
-    Serial.print("Température : ");
-    Serial.print(temp_sht20);
-    Serial.print("°C (");
-    Serial.print(temp_sht20_int);
-    Serial.println(")");
-
-    Serial.print("Humidité : ");
-    Serial.print(hum_sht20);
-    Serial.print("% (");
-    Serial.print(hum_sht20_int);
-    Serial.println(")");
+    // 📊 Affichage des valeurs
+    Serial.print("🌡 Température SHT20 : "); Serial.print(temp_sht20); Serial.println(" °C");
+    Serial.print("💧 Humidité SHT20 : "); Serial.print(hum_sht20); Serial.println(" %");
+    Serial.print("🌡 Température DS18B20 : "); Serial.print(temp_ds18b20); Serial.println(" °C");
 
     Serial.println("📡 Envoi du message LoRa...");
     int err = 0;
     modem.beginPacket();
     modem.write((uint8_t*)&temp_sht20_int, sizeof(temp_sht20_int)); // Envoi de la température
     modem.write((uint8_t*)&hum_sht20_int, sizeof(hum_sht20_int));   // Envoi de l'humidité
+    modem.write((uint8_t*)&temp_ds18b20_int, sizeof(temp_ds18b20_int));  // Température DS18B20
     err = modem.endPacket();
 
     if ( err <= 0 ) {
