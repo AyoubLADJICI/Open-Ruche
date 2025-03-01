@@ -30,7 +30,7 @@ void loop() {
     int ret=modem.joinOTAA(AppEUI, AppKEY);
     if ( ret ) {
       connected=true;
-      modem.minPollInterval(60);
+      modem.minPollInterval(10);
       Serial.println("Connected");
       modem.dataRate(5);   // switch to SF7
       delay(100);          // because ... more stable

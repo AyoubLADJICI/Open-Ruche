@@ -1,6 +1,6 @@
 //source : https://github.com/milesburton/Arduino-Temperature-Control-Library/blob/master/examples/Simple/Simple.ino
 //schema cablage : https://www.moussasoft.com/ds18b20-arduino/
-s
+
 // Include the libraries we need
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -17,10 +17,9 @@ DallasTemperature sensors(&oneWire);
 /*
  * The setup function. We only start the sensors here
  */
-void setup(void)
-{
+void setup(void) {
   // start serial port
-  Serial.begin(9600);
+  Serial.begin(11500);
   Serial.println("Dallas Temperature IC Control Library Demo");
 
   // Start up the library
@@ -30,8 +29,7 @@ void setup(void)
 /*
  * Main function, get and show the temperature
  */
-void loop(void)
-{
+void loop(void) {
   // call sensors.requestTemperatures() to issue a global temperature
   // request to all devices on the bus
   Serial.print("Requesting temperatures...");

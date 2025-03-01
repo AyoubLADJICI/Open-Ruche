@@ -1,25 +1,22 @@
-#include "uFire_SHT20.h"
-uFire_SHT20 sht20;
+#include <Wire.h>
+#include <Digital_Light_TSL2561.h>
 
 void setup() {
-  Serial.begin(115200);
-  Wire.begin();
-  sht20.begin();
+    Wire.begin();
+    Serial.begin(115200);
+    TSL2561.init();
 }
 
-void loop()
-{
-  sht20.measure_all();
-  Serial.println((String)sht20.tempC + "°C");
-  Serial.println((String)sht20.dew_pointC + "°C dew point");
-  Serial.println((String)sht20.RH + " %RH");
-  Serial.println((String)sht20.vpd() + " kPa VPD");
-  Serial.println();
-  delay(5000);
+void loop() {
+    Serial.print("The Light value is: ");
+    Serial.println(TSL2561.readVisibleLux());
+    delay(1000);
 }
 
-//Pour lire l'adresse du TSL2561 (Il vaut 0x40)
+//Pour lire l'adresse du TSL2561 (Il vaut 0x29)
 /*
+#include <Wire.h>
+
 void setup() {
     Serial.begin(115200);
     while (!Serial); // Attendre l'ouverture du moniteur série
