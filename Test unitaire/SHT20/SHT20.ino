@@ -11,9 +11,7 @@ void loop()
 {
   sht20.measure_all();
   Serial.println((String)sht20.tempC + "°C");
-  Serial.println((String)sht20.dew_pointC + "°C dew point");
   Serial.println((String)sht20.RH + " %RH");
-  Serial.println((String)sht20.vpd() + " kPa VPD");
   Serial.println();
   delay(5000);
 }

@@ -28,7 +28,7 @@ DHT_Unified dht(DHTPIN, DHTTYPE);
 uint32_t delayMS;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   // Initialize device.
   dht.begin();
   Serial.println(F("DHTxx Unified Sensor Example"));

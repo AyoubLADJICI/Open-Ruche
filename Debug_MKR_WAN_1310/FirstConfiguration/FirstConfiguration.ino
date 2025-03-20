@@ -120,7 +120,7 @@ void loop() {
   cpt++; // Incrémentation du compteur après chaque envoi
 
   // Attente avant le prochain envoi (60 secondes)
-  delay(60000);
+  delay(10000);
   while (modem.available()) {
     Serial.write(modem.read());
   }

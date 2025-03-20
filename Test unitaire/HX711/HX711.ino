@@ -1,12 +1,14 @@
 #include "HX711.h"
 
-#define LOADCELL_DOUT_PIN  1
-#define LOADCELL_SCK_PIN  6
+#define LOADCELL_DOUT_PIN 3 //Connecteur D3
+#define LOADCELL_SCK_PIN 4 //Connecteur D4
+
 HX711 scale;
 
 float calibration_factor = -8950; //-7050 cette variable à régler selon le capteur de poids, 235 avant, 13350 de tare avec une incertitude de .1 à .2
  
 void setup() {
+  Serial.println("HX711 calibration sketch");
   Serial.begin(115200);
   Serial.println("HX711 calibration sketch");
   /*Serial.println("Remove all weight from scale");
@@ -22,7 +24,7 @@ void setup() {
 
   
   //long zero_factor = scale.read_average(); //Get a baseline reading
-  //Serial.print("Zero factor: "); //This can be used to remove the need to tare the scale. Useful in permanent scale projects.
+  Serial.print("Zero factor: "); //This can be used to remove the need to tare the scale. Useful in permanent scale projects.
   //Serial.println(zero_factor);
 }
 
@@ -41,5 +43,5 @@ void loop() {
     else if(temp == '-' || temp == 'z')
       calibration_factor -= 10;
   }*/
-delay(1000);
+  delay(5000);
 }
