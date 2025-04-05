@@ -14,18 +14,21 @@
 //Configuration du module LoRa
 LoRaModem modem;
 
+//Message en provenance de la Nano
+String percent_queen_present = "";
+
 /*Initialisation des capteurs*/
 //Initialisation de la sonde SHT31
 Adafruit_SHT31 sht31 = Adafruit_SHT31();
 
 //Initialisation de la sonde DS18B20
-#define ONE_WIRE_BUS 0 //Connecteur D0 sur la carte MKR WAN 1310 (pour la connecter a la broche DATA de la sonde)
+#define ONE_WIRE_BUS 0 //Connecteur D0
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature ds18b20(&oneWire);
 DeviceAddress ds18b20_1, ds18b20_2;  // Adresses des deux sondes
 
 //Initialiation du capteur DHT22
-#define DHTPIN 2 //Connecteur D2 sur la carte
+#define DHTPIN 2 //Connecteur D2
 #define DHTTYPE DHT22 
 DHT_Unified dht(DHTPIN, DHTTYPE);
 
@@ -33,7 +36,8 @@ DHT_Unified dht(DHTPIN, DHTTYPE);
 #define LOADCELL_DOUT_PIN 3 //Connecteur D3
 #define LOADCELL_SCK_PIN 4 //Connecteur D4
 HX711 scale;
-float calibration_factor = -8950;
+const float calibration_factor = -8860;
+const long zero_factor = -2091146;
 
 //Initialisation du capteur de lumiere
 BH1750 lightMeter;
@@ -46,18 +50,15 @@ BH1750 lightMeter;
 #define VBAT_MIN 3.0 //Tension déchargée
 
 #define REGULATEUR_PIN 6  // Broche D6 pour contrôler le régulateur
-//int compteur = 0;
 
 // Clés LoRa OTAA
 String AppEUI = "213D57ED00000000";
-//String AppKEY = "8EED2DFE0FA94091FC093C1EBBF382C8";
-//String AppKEY = "85F8EAB0FC5582A516D88910C403BC80";
-String AppKEY = "FA813BD835A67CBE3EF4298A06FAB916"; //nouvelle carte
+String AppKEY = "FA813BD835A67CBE3EF4298A06FAB916"; 
 
 bool connected;
 int err_count;
 short con;
-int interval = 15;  // Intervalle par défaut (600 sec = 10 minutes)
+int delayBetweenSends = 30; // 30 sec par defaut
 
 /* Fonction pour lire la temperature extérieure avec la sonde SHT31 */
 void readSHT31(float &temperature, float &humidity) {
@@ -89,10 +90,9 @@ void readDHT22(float &temperature, float &humidity) {
 
 /* Fonction pour lire le poids de notre ruche */
 float readWeight() {
-    float poids = scale.get_units(10) / 2.2046;
-    Serial.println("Poids = " + String(poids) +" kg");
-    //return (poids < 0) ? 0 : poids;  //Correction si valeurs négatives
-    return abs(poids);
+    float poids = scale.get_units(10) / 2.2046; //Conversion lbs en kg
+    //Serial.println("Poids = " + String(poids) +" kg");
+    return (poids < 0) ? 0 : poids;  //Correction si valeurs négatives
 }
 
 /* Fonction pour lire le niveau de luminosite avec le capteur BH1750 */
@@ -108,26 +108,40 @@ float readLuminosity() {
 float readBatteryLevel() {
   analogReadResolution(12);
   float vBat = ((analogRead(VBAT_PIN) / 4095.0) * 3.3) * DIVISEUR_RATIO;
-  if (vBat < VBAT_MIN || vBat > VBAT_MAX) return VBAT_MIN; // Valeur par défaut si mesure erronée
   return vBat;
   //si on souhaite retourner le pourcentage, decommentez la ligne suivante
   //return (vBat >= VBAT_MAX) ? 100 : (vBat <= VBAT_MIN) ? 0 : (int)(((vBat - VBAT_MIN) / (VBAT_MAX - VBAT_MIN)) * 100);
 }
 
+void checkDownlink() {
+  delay(1000);  // Attente RX1
+  if (modem.available() >= 2) {
+    int high = modem.read();      // premier octet reçu
+    int low  = modem.read();      // deuxième octet reçu
+    int value = (high << 8) | low;  // recomposition en 16 bits
+    delayBetweenSends = value;
+    //Serial.print("Nouveau délai d'envoi : ");
+    //Serial.print(delayBetweenSends);
+    //Serial.println(" secondes");
+  }
+}
+
+
 void setup() {
   Serial.begin(115200);
-  //decommentez la ligne suivante pour voir les messages dans le terminale
-  //commentez la ligne suivante pour que notre prototype puisse fonctionner en eteignant l'interrupteur puis en le rallumant
+  Serial1.begin(9600); //Creation d'un terminal serie pour lire les valeurs de la Nano
+  //decommentez la ligne suivante pour voir les messages dans le moniteur serie
   //while (!Serial); 
   modem.begin(EU868);
   delay(1000);
   connected = false;
   err_count = 0;
   con = 0;
-  /*
-  pinMode(REGULATEUR_PIN, OUTPUT);
-  digitalWrite(REGULATEUR_PIN, HIGH);  
-  */
+
+  //Activation du regulateur 3V3
+  //pinMode(REGULATEUR_PIN, OUTPUT);
+  //digitalWrite(REGULATEUR_PIN, HIGH);  
+  
   Wire.begin();
   
   if (!sht31.begin(0x44)) {
@@ -153,8 +167,8 @@ void setup() {
 
   //Initialisation de la balance
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
-  scale.tare(); //Remise a zero //coder en brut le tare
   scale.set_scale(calibration_factor);
+  scale.set_offset(zero_factor); // Pas de tare automatique
 
   digitalWrite(LED_BUILTIN, HIGH);
   delay(500);
@@ -165,9 +179,10 @@ void loop() {
   if (!connected) {
     //Serial.print("Tentative de connexion LoRa : ");
     //Serial.println(++con);
-    modem.begin(EU868);
+    modem.begin(EU868); //Réinitialisation du modem après le Deep Sleep
     int ret=modem.joinOTAA(AppEUI, AppKEY);
     if (ret) {
+      //Serial.print("Tentative de connexion LoRa : ");
       connected = true;
       modem.minPollInterval(60);
       modem.dataRate(5);  // switch to SF7
@@ -177,16 +192,6 @@ void loop() {
   }
   
   if (connected) {
-    /*
-    if (compteur >= 2) {
-      digitalWrite(REGULATEUR_PIN, LOW);
-      delay(500); 
-    } else{
-      digitalWrite(REGULATEUR_PIN, HIGH);
-      delay(500); 
-    }*/
-     
-
     //Serial.print("Connecte : ");
    
     /*Lecture des capteurs*/
@@ -196,23 +201,29 @@ void loop() {
     float temp_dht22, hum_dht22;
     float poids, lux, batteryLevel;
 
-    //🔹Mesure Température et Humidité du SHT31
+    //Mesure Température et Humidité du SHT31
     readSHT31(temp_sht31, hum_sht31);
-    
-    //🔹Mesure Température DS18B20
+    //Mesure Température DS18B20
     readDS18B20(temp_ds18b20_1, temp_ds18b20_2);
    
-    //🔹Mesure Température et Humidité du DHT22
+    //Mesure Température et Humidité du DHT22
     readDHT22(temp_dht22, hum_dht22);
     
-    //🔹Mesure du Poids (Balance HX711)
+    //Mesure du Poids (Balance HX711)
     poids = readWeight();
     
-    //🔹Lecture du capteur de lumière BH1750
+    //Lecture du capteur de lumière BH1750
     lux = readLuminosity();
-
-    //🔹Lecture du pourcentage de la batterie
+ 
+    //Lecture du pourcentage de la batterie
     batteryLevel = readBatteryLevel();
+
+    //Lecture de la valeur de la nano, c'est un float normalement
+    if (Serial1.available()) {
+      percent_queen_present = Serial1.readStringUntil('\n');
+      //Serial.println(percent_queen_present);
+      //percent_queen_present.trim();
+    }
         
     //Conversion en short (multiplié par 100 pour garder 2 décimales)
     short temp_sht31_int = (short)(temp_sht31 * 100);
@@ -222,8 +233,15 @@ void loop() {
     short temp_dht22_int = (short)(temp_dht22 * 100);
     short hum_dht22_int = (short)(hum_dht22 * 100);
     short poids_int = (short)(poids * 100);
-    short lux_int = (short)(lux * 100);
     short batterie_int = (short)(batteryLevel * 100);
+    float percent_queen = percent_queen_present.toFloat();
+    short percent_queen_present_int = (short)(percent_queen * 100);
+
+    /*Correction probleme capacite*/
+    //notre capteur BH1750 peut mesurer sur une plage de valeurs
+    //allant de 0 a 65000 lux or 2^16 = 65536 donc on va envoyer notre 
+    //valeur sous la forme d'un int
+    uint16_t lux_int = (uint16_t)(lux); 
 
     //Envoi LoRa
     int err = 0;
@@ -237,11 +255,12 @@ void loop() {
     modem.write((uint8_t*)&poids_int, sizeof(poids_int));
     modem.write((uint8_t*)&lux_int, sizeof(lux_int));
     modem.write((uint8_t*)&batterie_int, sizeof(batterie_int));
+    modem.write((uint8_t*)&percent_queen_present_int, sizeof(percent_queen_present_int));
     err = modem.endPacket();
 
     if (err > 0) {
       err_count = 0;
-      Serial.println("Message envoyé avec succès");
+      //Serial.println("Message envoyé avec succès");
     } else {
       //Serial.println("Erreur : ");
       //Serial.println(err);
@@ -257,32 +276,16 @@ void loop() {
         delay(1000);
       }
     }
-
-    // Réception du downlink
-    if (modem.available()) {
-      char rcv[64];
-      int i = 0;
-      while (modem.available()) {
-        rcv[i++] = (char)modem.read();
-      }
-      rcv[i] = '\0';  // Null-terminate the string
-
-      // Analyser le message reçu pour extraire la nouvelle période de deep sleep
-      int newInterval = atoi(rcv);
-      if (newInterval > 0) {
-        interval = newInterval;  // Mettre à jour la période de deep sleep
-        Serial.print("Nouvelle période de deep sleep reçue : ");
-        Serial.println(interval);
-      }
-    }
-
-    /*Optimisation de notre prototype*/
-    scale.power_down(); //Mettre le HX711 en mode veille
-    //LowPower.deepSleep(600000); //Passage en Deep Sleep pendant 10 minutes
-    LowPower.deepSleep(interval * 1000);
-    //LowPower.deepSleep(15000); //decommentez juste pendant les tests
-    scale.power_up(); //reactivation du hx711
-    //compteur++;  // Incrémenter le compteur à chaque réveil
+   
+    // Lecture du downlink pour mise à jour du délai
+    delay(5000); // attente fenêtre RX1
+    checkDownlink();
     
+    /*Optimisation de notre prototype*/
+    modem.sleep(); //Module Lora en veille
+    scale.power_down(); //Mettre le HX711 en mode veille
+    //LowPower.deepSleep(600000); //Passage de la carte MKR WAN en Deep Sleep pendant 10 minutes
+    LowPower.deepSleep(delayBetweenSends * 1000); //on peut piloter le delai entre 2 envoi grace au downlink
+    scale.power_up(); //reactivation du hx711
   }
 }
